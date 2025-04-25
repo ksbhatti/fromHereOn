@@ -142,7 +142,7 @@ echo -e " \033[32;5mStep 2 install Kube-VIP for HA\033[0m"
 kubectl apply -f https://kube-vip.io/manifests/rbac.yaml
 
 # Step 3: Download kube-vip
-curl -sO https://raw.githubusercontent.com/JamesTurland/JimsGarage/main/Kubernetes/K3S-Deploy/kube-vip
+curl -sO https://raw.githubusercontent.com/ksbhatti/fromHereOn/refs/heads/main/Kubernetes/Deploy/kube-vip
 cat kube-vip | sed 's/$KVVERSION/'$KVVERSION'/g; s/$interface/'$interface'/g; s/$vip/'$vip'/g' > $HOME/kube-vip.yaml
 
 echo -e " \033[32;5mStep 4 Copy kube-vip.yaml to master1\033[0m"
@@ -199,8 +199,9 @@ echo -e " \033[32;5mStep 8 Install Metallb\033[0m"
 # Step 8: Install Metallb
 kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.12.1/manifests/namespace.yaml
 kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.9/config/manifests/metallb-native.yaml
+
 # Download ipAddressPool and configure using lbrange above
-curl -sO https://raw.githubusercontent.com/JamesTurland/JimsGarage/main/Kubernetes/K3S-Deploy/ipAddressPool
+curl -sO https://raw.githubusercontent.com/ksbhatti/fromHereOn/refs/heads/main/Kubernetes/Deploy/ipAddressPool
 cat ipAddressPool | sed 's/$lbrange/'$lbrange'/g' > $HOME/ipAddressPool.yaml
 kubectl apply -f $HOME/ipAddressPool.yaml
 
