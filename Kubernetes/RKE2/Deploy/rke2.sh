@@ -114,6 +114,7 @@ for node in "${all[@]}"; do
   ssh-copy-id $user@$node
 done
 
+echo -e " \033[32;5mStep 01: Create Kube VIP\033[0m"
 # Step 1: Create Kube VIP
 # create RKE2's self-installing manifest dir
 sudo mkdir -p /var/lib/rancher/rke2/server/manifests
