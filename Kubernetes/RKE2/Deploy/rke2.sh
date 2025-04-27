@@ -1,5 +1,20 @@
 #!/bin/bash
 
+echo -e " \033[33;5m    __  _          _        ___                            \033[0m"
+echo -e " \033[33;5m    \ \(_)_ __ ___( )__    / _ \__ _ _ __ __ _  __ _  ___  \033[0m"
+echo -e " \033[33;5m     \ \ | '_ \` _ \/ __|  / /_\/ _\` | '__/ _\` |/ _\` |/ _ \ \033[0m"
+echo -e " \033[33;5m  /\_/ / | | | | | \__ \ / /_\\  (_| | | | (_| | (_| |  __/ \033[0m"
+echo -e " \033[33;5m  \___/|_|_| |_| |_|___/ \____/\__,_|_|  \__,_|\__, |\___| \033[0m"
+echo -e " \033[33;5m                                               |___/       \033[0m"
+
+echo -e " \033[36;5m                      ___ _  _____ ___                     \033[0m"
+echo -e " \033[36;5m                     | _ \ |/ / __|_  )                    \033[0m"
+echo -e " \033[36;5m                     |   / ' <| _| / /                     \033[0m"
+echo -e " \033[36;5m                     |_|_\_|\_\___/___|                    \033[0m"
+echo -e " \033[36;5m                                                           \033[0m"
+echo -e " \033[32;5m             https://youtube.com/@jims-garage              \033[0m"
+echo -e " \033[32;5m                                                           \033[0m"
+
 
 #############################################
 # YOU SHOULD ONLY NEED TO EDIT THIS SECTION #
@@ -54,9 +69,9 @@ sudo timedatectl set-ntp off
 sudo timedatectl set-ntp on
 
 # Move SSH certs to ~/.ssh and change permissions
-#cp /home/$user/{$certName,$certName.pub} /home/$user/.ssh
+cp /home/$user/{$certName,$certName.pub} /home/$user/.ssh
 chmod 600 /home/$user/.ssh/$certName 
-#chmod 644 /home/$user/.ssh/$certName.pub
+chmod 644 /home/$user/.ssh/$certName.pub
 
 # Install Kubectl if not already present
 if ! command -v kubectl version &> /dev/null
@@ -94,21 +109,20 @@ else
 fi
 
 #add ssh keys for all nodes
-#for node in "${all[@]}"; do
-#  ssh-copy-id $user@$node
-#done
+for node in "${all[@]}"; do
+  ssh-copy-id $user@$node
+done
 
-echo -e " \033[32;5mStep 01: Create Kube VIP\033[0m"
 # Step 1: Create Kube VIP
 # create RKE2's self-installing manifest dir
 sudo mkdir -p /var/lib/rancher/rke2/server/manifests
 # Install the kube-vip deployment into rke2's self-installing manifest folder
-curl -sO https://raw.githubusercontent.com/ksbhatti/fromHereOn/refs/heads/main/Kubernetes/Deploy/kube-vip
+curl -sO https://raw.githubusercontent.com/ksbhatti/fromHereOn/refs/heads/main/Kubernetes/RKE2/Deploy/kube-vip
 cat kube-vip | sed 's/$KVVERSION/'$KVVERSION'/g; s/$interface/'$interface'/g; s/$vip/'$vip'/g' > $HOME/kube-vip.yaml
 sudo mv kube-vip.yaml /var/lib/rancher/rke2/server/manifests/kube-vip.yaml
 
 # Find/Replace all k3s entries to represent rke2
-sudo sed -i 's/k3s/rke2/g' /var/lib/rancher/rke2/server/manifests/kube-vip.yaml
+#sudo sed -i 's/k3s/rke2/g' /var/lib/rancher/rke2/server/manifests/kube-vip.yaml
 # copy kube-vip.yaml to home directory
 sudo cp /var/lib/rancher/rke2/server/manifests/kube-vip.yaml ~/kube-vip.yaml
 # change owner
@@ -133,21 +147,14 @@ sudo cp ~/config.yaml /etc/rancher/rke2/config.yaml
 # update path with rke2-binaries
 echo 'export KUBECONFIG=/etc/rancher/rke2/rke2.yaml' >> ~/.bashrc ; echo 'export PATH=${PATH}:/var/lib/rancher/rke2/bin' >> ~/.bashrc ; echo 'alias k=kubectl' >> ~/.bashrc ; source ~/.bashrc ;
 
-echo -e " \033[32;5mStep 02: Copy kube-vip.yaml and certs to all masters\033[0m"
 # Step 2: Copy kube-vip.yaml and certs to all masters
 for newnode in "${allmasters[@]}"; do
-    echo "put $HOME/kube-vip.yaml ~/kube-vip.yaml" > sftp_commands.txt
-    echo "put $HOME/config.yaml ~/config.yaml" > sftp_commands.txt
-    echo "put ~/.ssh/$certName ~/.ssh" > sftp_commands.txt
-    echo "quit" >> sftp_commands.txt
-    if ! sftp -b "sftp_commands.txt" $user@$newnode; then
-        echo "SFTP transfer failed" >&2
-        exit 1
-    fi  
-    echo -e " \033[32;5mCopied successfully!\033[0m"
+  scp -i ~/.ssh/$certName $HOME/kube-vip.yaml $user@$newnode:~/kube-vip.yaml
+  scp -i ~/.ssh/$certName $HOME/config.yaml $user@$newnode:~/config.yaml
+  scp -i ~/.ssh/$certName ~/.ssh/{$certName,$certName.pub} $user@$newnode:~/.ssh
+  echo -e " \033[32;5mCopied successfully!\033[0m"
 done
 
-echo -e " \033[32;5mStep 03: Connect to Master1 and move kube-vip.yaml and config.yaml. Then install RKE2, copy token back to admin machine. We then use the token to bootstrap additional masternodes\033[0m"
 # Step 3: Connect to Master1 and move kube-vip.yaml and config.yaml. Then install RKE2, copy token back to admin machine. We then use the token to bootstrap additional masternodes
 ssh -tt $user@$master1 -i ~/.ssh/$certName sudo su <<EOF
 mkdir -p /var/lib/rancher/rke2/server/manifests
@@ -159,20 +166,13 @@ curl -sfL https://get.rke2.io | sh -
 systemctl enable rke2-server.service
 systemctl start rke2-server.service
 echo "StrictHostKeyChecking no" > ~/.ssh/config
-#ssh-copy-id -i /home/$user/.ssh/$certName $user@$admin
-echo "put /var/lib/rancher/rke2/server/token ~/token" > sftp_commands.txt
-echo "put /etc/rancher/rke2/rke2.yaml ~/.kube/rke2.yaml" > sftp_commands.txt
-echo "quit" >> sftp_commands.txt
-    if ! sftp -b "sftp_commands.txt" $user@$admin; then
-        echo "SFTP transfer failed" >&2
-        exit 1
-    fi  
-echo -e " \033[32;5mCopied successfully!\033[0m"
+ssh-copy-id -i /home/$user/.ssh/$certName $user@$admin
+scp -i /home/$user/.ssh/$certName /var/lib/rancher/rke2/server/token $user@$admin:~/token
+scp -i /home/$user/.ssh/$certName /etc/rancher/rke2/rke2.yaml $user@$admin:~/.kube/rke2.yaml
 exit
 EOF
 echo -e " \033[32;5mMaster1 Completed\033[0m"
 
-echo -e " \033[32;5mStep 04: Set variable to the token we just extracted, set kube config location\033[0m"
 # Step 4: Set variable to the token we just extracted, set kube config location
 token=`cat token`
 sudo cat ~/.kube/rke2.yaml | sed 's/127.0.0.1/'$master1'/g' > $HOME/.kube/config
@@ -181,12 +181,10 @@ export KUBECONFIG=${HOME}/.kube/config
 sudo cp ~/.kube/config /etc/rancher/rke2/rke2.yaml
 kubectl get nodes
 
-echo -e " \033[32;5mStep 05: Install kube-vip as network LoadBalancer - Install the kube-vip Cloud Provider\033[0m"
 # Step 5: Install kube-vip as network LoadBalancer - Install the kube-vip Cloud Provider
 kubectl apply -f https://kube-vip.io/manifests/rbac.yaml
 kubectl apply -f https://raw.githubusercontent.com/kube-vip/kube-vip-cloud-provider/main/manifest/kube-vip-cloud-controller.yaml
 
-echo -e " \033[32;5mStep 06: Add other Masternodes, note we import the token we extracted from step 3\033[0m"
 # Step 6: Add other Masternodes, note we import the token we extracted from step 3
 for newnode in "${masters[@]}"; do
   ssh -tt $user@$newnode -i ~/.ssh/$certName sudo su <<EOF
@@ -209,7 +207,6 @@ done
 
 kubectl get nodes
 
-echo -e " \033[32;5mStep 07: Add Workers\033[0m"
 # Step 7: Add Workers
 for newnode in "${workers[@]}"; do
   ssh -tt $user@$newnode -i ~/.ssh/$certName sudo su <<EOF
@@ -230,16 +227,14 @@ done
 
 kubectl get nodes
 
-echo -e " \033[32;5mStep 08: Install Metall\033[0m"
 # Step 8: Install Metallb
 echo -e " \033[32;5mDeploying Metallb\033[0m"
 kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.12.1/manifests/namespace.yaml
 kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.9/config/manifests/metallb-native.yaml
 # Download ipAddressPool and configure using lbrange above
-curl -sO https://raw.githubusercontent.com/ksbhatti/fromHereOn/refs/heads/main/Kubernetes/Deploy/ipAddressPool
+curl -sO https://raw.githubusercontent.com/ksbhatti/fromHereOn/refs/heads/main/Kubernetes/RKE2/Deploy/ipAddressPool
 cat ipAddressPool | sed 's/$lbrange/'$lbrange'/g' > $HOME/ipAddressPool.yaml
 
-echo -e " \033[32;5mStep 09: Deploy IP Pools and l2Advertisement\033[0m"
 # Step 9: Deploy IP Pools and l2Advertisement
 echo -e " \033[32;5mAdding IP Pools, waiting for Metallb to be available first. This can take a long time as we're likely being rate limited for container pulls...\033[0m"
 kubectl wait --namespace metallb-system \
@@ -249,7 +244,6 @@ kubectl wait --namespace metallb-system \
 kubectl apply -f ipAddressPool.yaml
 kubectl apply -f https://raw.githubusercontent.com/JamesTurland/JimsGarage/main/Kubernetes/RKE2/l2Advertisement.yaml
 
-echo -e " \033[32;5mStep 10: Install Rancher (Optional - Delete if not required)\033[0m"
 # Step 10: Install Rancher (Optional - Delete if not required)
 #Install Helm
 echo -e " \033[32;5mInstalling Helm\033[0m"
