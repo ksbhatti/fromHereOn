@@ -69,9 +69,9 @@ sudo timedatectl set-ntp off
 sudo timedatectl set-ntp on
 
 # Move SSH certs to ~/.ssh and change permissions
-cp /home/$user/{$certName,$certName.pub} /home/$user/.ssh
+#cp /home/$user/{$certName,$certName.pub} /home/$user/.ssh
 chmod 600 /home/$user/.ssh/$certName 
-chmod 644 /home/$user/.ssh/$certName.pub
+#chmod 644 /home/$user/.ssh/$certName.pub
 
 # Install Kubectl if not already present
 if ! command -v kubectl version &> /dev/null
@@ -108,6 +108,7 @@ else
   fi
 fi
 
+echo -e " \033[32;5mStep 01: Create Kube VIP\033[0m"
 #add ssh keys for all nodes
 for node in "${all[@]}"; do
   ssh-copy-id $user@$node
@@ -147,14 +148,16 @@ sudo cp ~/config.yaml /etc/rancher/rke2/config.yaml
 # update path with rke2-binaries
 echo 'export KUBECONFIG=/etc/rancher/rke2/rke2.yaml' >> ~/.bashrc ; echo 'export PATH=${PATH}:/var/lib/rancher/rke2/bin' >> ~/.bashrc ; echo 'alias k=kubectl' >> ~/.bashrc ; source ~/.bashrc ;
 
+echo -e " \033[32;5mStep 02: Copy kube-vip.yaml and certs to all masters\033[0m"
 # Step 2: Copy kube-vip.yaml and certs to all masters
 for newnode in "${allmasters[@]}"; do
   scp -i ~/.ssh/$certName $HOME/kube-vip.yaml $user@$newnode:~/kube-vip.yaml
   scp -i ~/.ssh/$certName $HOME/config.yaml $user@$newnode:~/config.yaml
-  scp -i ~/.ssh/$certName ~/.ssh/{$certName,$certName.pub} $user@$newnode:~/.ssh
+  #scp -i ~/.ssh/$certName ~/.ssh/{$certName,$certName.pub} $user@$newnode:~/.ssh
   echo -e " \033[32;5mCopied successfully!\033[0m"
 done
 
+echo -e " \033[32;5mStep 03: Connect to Master1 and move kube-vip.yaml and config.yaml. Then install RKE2, copy token back to admin machine. We then use the token to bootstrap additional masternodes\033[0m"
 # Step 3: Connect to Master1 and move kube-vip.yaml and config.yaml. Then install RKE2, copy token back to admin machine. We then use the token to bootstrap additional masternodes
 ssh -tt $user@$master1 -i ~/.ssh/$certName sudo su <<EOF
 mkdir -p /var/lib/rancher/rke2/server/manifests
@@ -173,6 +176,7 @@ exit
 EOF
 echo -e " \033[32;5mMaster1 Completed\033[0m"
 
+echo -e " \033[32;5mStep 04: Set variable to the token we just extracted, set kube config location\033[0m"
 # Step 4: Set variable to the token we just extracted, set kube config location
 token=`cat token`
 sudo cat ~/.kube/rke2.yaml | sed 's/127.0.0.1/'$master1'/g' > $HOME/.kube/config
@@ -181,10 +185,12 @@ export KUBECONFIG=${HOME}/.kube/config
 sudo cp ~/.kube/config /etc/rancher/rke2/rke2.yaml
 kubectl get nodes
 
+echo -e " \033[32;5mStep 05: Install kube-vip as network LoadBalancer - Install the kube-vip Cloud Provider\033[0m"
 # Step 5: Install kube-vip as network LoadBalancer - Install the kube-vip Cloud Provider
 kubectl apply -f https://kube-vip.io/manifests/rbac.yaml
 kubectl apply -f https://raw.githubusercontent.com/kube-vip/kube-vip-cloud-provider/main/manifest/kube-vip-cloud-controller.yaml
 
+echo -e " \033[32;5mStep 06: Add other Masternodes, note we import the token we extracted from step 3\033[0m"
 # Step 6: Add other Masternodes, note we import the token we extracted from step 3
 for newnode in "${masters[@]}"; do
   ssh -tt $user@$newnode -i ~/.ssh/$certName sudo su <<EOF
@@ -207,6 +213,7 @@ done
 
 kubectl get nodes
 
+echo -e " \033[32;5mStep 07: Add Workers\033[0m"
 # Step 7: Add Workers
 for newnode in "${workers[@]}"; do
   ssh -tt $user@$newnode -i ~/.ssh/$certName sudo su <<EOF
@@ -227,6 +234,7 @@ done
 
 kubectl get nodes
 
+echo -e " \033[32;5mStep 08: Install Metall\033[0m"
 # Step 8: Install Metallb
 echo -e " \033[32;5mDeploying Metallb\033[0m"
 kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.12.1/manifests/namespace.yaml
@@ -235,6 +243,7 @@ kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.9/confi
 curl -sO https://raw.githubusercontent.com/ksbhatti/fromHereOn/refs/heads/main/Kubernetes/RKE2/Deploy/ipAddressPool
 cat ipAddressPool | sed 's/$lbrange/'$lbrange'/g' > $HOME/ipAddressPool.yaml
 
+echo -e " \033[32;5mStep 09: Deploy IP Pools and l2Advertisement\033[0m"
 # Step 9: Deploy IP Pools and l2Advertisement
 echo -e " \033[32;5mAdding IP Pools, waiting for Metallb to be available first. This can take a long time as we're likely being rate limited for container pulls...\033[0m"
 kubectl wait --namespace metallb-system \
@@ -244,6 +253,7 @@ kubectl wait --namespace metallb-system \
 kubectl apply -f ipAddressPool.yaml
 kubectl apply -f https://raw.githubusercontent.com/JamesTurland/JimsGarage/main/Kubernetes/RKE2/l2Advertisement.yaml
 
+echo -e " \033[32;5mStep 10: Install Rancher (Optional - Delete if not required)\033[0m"
 # Step 10: Install Rancher (Optional - Delete if not required)
 #Install Helm
 echo -e " \033[32;5mInstalling Helm\033[0m"
