@@ -1,0 +1,33 @@
+cluster:
+  name: cluster-1
+  id: 10
+prometheus:
+  enabled: true
+  serviceMonitor:
+    enabled: false
+dashboards:
+  enabled: true
+hubble:
+  metrics:
+    enabled:
+    - dns:query;ignoreAAAA
+    - drop
+    - tcp
+    - flow
+    - icmp
+    - http
+    dashboards:
+      enabled: true
+  relay:
+    enabled: true
+    prometheus:
+      enabled: true
+  ui:
+    enabled: true
+    baseUrl: "/"
+version:$ciliumversion
+operator:
+  prometheus:
+    enabled: true
+  dashboards:
+    enabled: true
